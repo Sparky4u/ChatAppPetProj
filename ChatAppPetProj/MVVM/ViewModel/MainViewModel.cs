@@ -1,67 +1,87 @@
 ﻿using ChatClient.MVVM.Core;
 using ChatClient.MVVM.Model;
 using ChatClient.Net;
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace ChatClient.MVVM.ViewModel
 {
-    class MainViewModel
-    { 
+    internal class MainViewModel : BaseNotifyPropertyChanged
+    {
+        private readonly Server _server;
+        private string _message;
 
-        public ObservableCollection<UserModel> Users { get; set; }
-        public ObservableCollection<string> Messages { get; set; }
-        public RelayCommand ConnectToSeverCommand { get; set; }
-        public RelayCommand SendMessageCommand { get; set; }
-
-        public string Username { get; set; } 
-        public string Message { get; set; }
-        private Server _server;
         public MainViewModel()
         {
             Users = new ObservableCollection<UserModel>();
             Messages = new ObservableCollection<string>();
 
             _server = new Server();
-            _server.connectedEvent += UserConnected;
-            _server.msgReceivedEvent += MessageRecived;
-            _server.userDisconnectEvent += RemovedUser;
-            ConnectToSeverCommand = new RelayCommand(o => _server.ConnectToServer(Username), o => !string.IsNullOrEmpty(Username));
-
-            SendMessageCommand = new RelayCommand(o => _server.SendMessageToServer(Message), o => !string.IsNullOrEmpty(Message));
+            _server.ConnectedEvent += UserConnected;
+            _server.MsgReceivedEvent += MessageReceived;
+            _server.UserDisconnectEvent += RemovedUser;
+            ConnectToSeverCommand = new RelayCommand(_ => ExecuteConnectToServer(), _ => GetCanConnectToServer());
+            SendMessageCommand = new RelayCommand(_ => ExecuteSendMessage(), _ => GetCanSendMessage());
             
         }
 
-        private void RemovedUser()
-        {
-            var uid = _server.PacketReader.ReadMessage();
-            var user = Users.Where( x => x.UID == uid ).FirstOrDefault();
-            Application.Current.Dispatcher.Invoke(() => Users.Remove(user));
-        }
+        public ObservableCollection<UserModel> Users { get; set; }
+        public ObservableCollection<string> Messages { get; set; }
+        public RelayCommand ConnectToSeverCommand { get; set; }
+        public RelayCommand SendMessageCommand { get; set; }
 
-        private void MessageRecived()
-        {
-           var msg = _server.PacketReader.ReadMessage();
-            Application.Current.Dispatcher.Invoke(() => Messages.Add(msg));
-        }
+        public string Username { get; set; }
 
-        private void UserConnected()
+        public string Message
         {
-            var user = new UserModel()
+            get => _message;
+            set
             {
-                Username = _server.PacketReader.ReadMessage(),
-                UID = _server.PacketReader.ReadMessage(),
-            };
-
-            if (!Users.Any(x => x.UID == user.UID))
-            {
-               Application.Current.Dispatcher.Invoke(() => Users.Add(user));
+                if (value == _message) return;
+                _message = value;
+                OnPropertyChanged(nameof(Message));
             }
+        }
+
+        private void UserConnected(UserModel connectedUser)
+        {
+            if (Users.All(x => x.UID != connectedUser.UID))
+            {
+                Application.Current.Dispatcher.Invoke(() => Users.Add(connectedUser));
+            }
+        }
+
+        private void RemovedUser(string uid)
+        {
+            var user = Users.FirstOrDefault(x => x.UID == uid);
+            Users.Remove(user);
+        }
+
+        private void MessageReceived(string message)
+        {
+            Application.Current.Dispatcher.Invoke(() => Messages.Add(message));
+        }
+
+        private void ExecuteConnectToServer()
+        {
+            _server.ConnectToServer(Username);
+        }
+
+        private void ExecuteSendMessage()
+        {
+            _server.SendMessageToServer(Message);
+            Message = string.Empty;
+        }
+
+        private bool GetCanConnectToServer()
+        {
+            return !string.IsNullOrEmpty(Username);
+        }
+
+        private bool GetCanSendMessage()
+        {
+            return !string.IsNullOrEmpty(Message);
         }
     }
 }

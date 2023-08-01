@@ -1,62 +1,50 @@
-﻿using ChatServer.Net.IO;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Net.Sockets;
+using Shared.Net.IO;
 
 namespace ChatServer
 {
     public class Client
     {
-        public string Username { get; set; }
-        public Guid UID { get; set; }
-        public TcpClient ClientSocket { get; set; }
+        private readonly PacketReader _packetReader;
 
-        PacketReader _packetReader;
         public Client(TcpClient client)
         {
             ClientSocket = client;
-            UID = Guid.NewGuid();
+            Uid = Guid.NewGuid();
             _packetReader = new PacketReader(ClientSocket.GetStream());
-            
-            var opcode = _packetReader.ReadByte();
             Username = _packetReader.ReadMessage();
 
             Console.WriteLine($"[{DateTime.Now}]: Client has connected with the username: {Username}");
 
-            Task.Run(() => Process());
+            Task.Run(Process);
         }
 
-        void Process()
+        public string Username { get; set; }
+        public Guid Uid { get; set; }
+        public TcpClient ClientSocket { get; set; }
+
+        private void Process()
         {
             while (true)
-            {
                 try
                 {
-                    var opcode = _packetReader.ReadByte();
-                    switch (opcode) 
+                    var operationCode = _packetReader.ReadByte();
+                    switch (operationCode)
                     {
                         case 5:
                             var msg = _packetReader.ReadMessage();
                             Console.WriteLine($"[{DateTime.Now}:Message received! {msg}]");
                             Program.BroadcastMessage($"[{DateTime.Now}] : [{Username}]: {msg} ");
                             break;
-                        default:
-                            break;
                     }
-                    
                 }
                 catch (Exception)
                 {
-                    Console.WriteLine($"[{UID.ToString()}: Disconnected!]");
-                    Program.BroadcastDisconnect(UID.ToString());
+                    Console.WriteLine($"[{Uid}: Disconnected!]");
+                    Program.BroadcastDisconnect(Uid.ToString());
                     ClientSocket.Close();
                     break;
-                   
                 }
-            }
         }
     }
 }
